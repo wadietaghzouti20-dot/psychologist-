@@ -38,6 +38,7 @@ const SERVICES = {
 function setup() {
   const id = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
   if (!id) throw new Error("Ajoutez d'abord la propriété de script SPREADSHEET_ID.");
+  if (!adminEmail_()) throw new Error("Ajoutez la propriété de script ADMIN_EMAIL avant l'initialisation.");
   const ss = SpreadsheetApp.openById(id);
   ensureSheet_(ss, "Appointments", APPOINTMENT_HEADERS);
   ensureSheet_(ss, "Settings", ["Key", "Value"]);
@@ -224,13 +225,17 @@ function sendBookingEmails_(data, reference, cancelUrl, start, duration) {
     "\nHeure : " + timeLabel + "\nDurée prévue : " + duration + " minutes\nRéférence : " + reference +
     "\n\nPour annuler ce rendez-vous, ouvrez ce lien :\n" + cancelUrl +
     "\n\nSi vous n'êtes pas à l'origine de cette demande, contactez directement le cabinet.";
-  if (data.email) MailApp.sendEmail(data.email, "Confirmation de rendez-vous — " + clinic, patientBody);
+  if (data.email) {
+    try { MailApp.sendEmail(data.email, "Confirmation de rendez-vous — " + clinic, patientBody); }
+    catch (e) { audit_("PATIENT_EMAIL_ERROR", reference, String(e)); }
+  }
   if (admin) {
     const adminBody = "Nouveau rendez-vous confirmé.\nPatient : " + data.fullName +
       "\nTéléphone : " + data.phone + "\nE-mail : " + data.email +
       "\nMotif : " + data.service + "\nDate : " + dateLabel + "\nHeure : " + timeLabel +
       "\nRéférence : " + reference + "\nAnnulation : " + cancelUrl;
-    MailApp.sendEmail(admin, "Nouveau rendez-vous — " + reference, adminBody);
+    try { MailApp.sendEmail(admin, "Nouveau rendez-vous — " + reference, adminBody); }
+    catch (e) { audit_("ADMIN_EMAIL_ERROR", reference, String(e)); }
   }
 }
 
@@ -256,10 +261,16 @@ function cancelFromLink_(reference, token) {
     audit_("CANCELLED", reference, "Patient cancellation link");
     const clinic = clinicName_();
     const dateLabel = String(row[3]) + " à " + String(row[4]);
-    if (row[8]) MailApp.sendEmail(String(row[8]), "Annulation confirmée — " + clinic,
-      "Votre rendez-vous du " + dateLabel + " a été annulé.\nRéférence : " + reference);
-    if (adminEmail_()) MailApp.sendEmail(adminEmail_(), "Rendez-vous annulé — " + reference,
-      "Le rendez-vous de " + row[6] + " du " + dateLabel + " a été annulé par le lien patient.");
+    if (row[8]) {
+      try { MailApp.sendEmail(String(row[8]), "Annulation confirmée — " + clinic,
+        "Votre rendez-vous du " + dateLabel + " a été annulé.\nRéférence : " + reference); }
+      catch (e) { audit_("CANCELLATION_EMAIL_ERROR", reference, String(e)); }
+    }
+    if (adminEmail_()) {
+      try { MailApp.sendEmail(adminEmail_(), "Rendez-vous annulé — " + reference,
+        "Le rendez-vous de " + row[6] + " du " + dateLabel + " a été annulé par le lien patient."); }
+      catch (e) { audit_("CANCELLATION_ADMIN_EMAIL_ERROR", reference, String(e)); }
+    }
     return html_("Votre rendez-vous a bien été annulé. Le cabinet a été informé.");
   } finally {
     lock.releaseLock();
