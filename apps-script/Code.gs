@@ -180,7 +180,7 @@ function getBookedIntervals_(dateString) {
   const sheet = getSpreadsheet_().getSheetByName("Appointments");
   if (!sheet || sheet.getLastRow() < 2) return [];
   const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, APPOINTMENT_HEADERS.length).getValues();
-  return values.filter(r => String(r[3]) === dateString && String(r[9]) === "CONFIRMED")
+  return values.filter(r => sheetDateString_(r[3]) === dateString && String(r[9]) === "CONFIRMED")
     .map(r => {
       const start = minutes_(String(r[4]));
       return { start: start, end: start + Number(r[5] || 50) + Number(setting_("BUFFER_MINUTES", 10)) };
@@ -284,7 +284,7 @@ function sendDueReminders() {
   const now = new Date();
   values.forEach((r, i) => {
     if (String(r[9]) !== "CONFIRMED" || r[12]) return;
-    const start = parseLocalDateTime_(String(r[3]), String(r[4]));
+    const start = parseLocalDateTime_(sheetDateString_(r[3]), String(r[4]));
     const hours = (start.getTime() - now.getTime()) / 3600000;
     if (hours <= 24 && hours > 0) {
       const dateLabel = Utilities.formatDate(start, TZ, "EEEE d MMMM yyyy");
@@ -335,6 +335,11 @@ function minutes_(value) {
 }
 function timeString_(mins) {
   return String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(mins % 60).padStart(2, "0");
+}
+function sheetDateString_(value) {
+  return value instanceof Date
+    ? Utilities.formatDate(value, TZ, "yyyy-MM-dd")
+    : String(value || "");
 }
 function parseLocalDateTime_(dateString, timeString) {
   const p = String(dateString).split("-").map(Number);
